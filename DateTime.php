@@ -79,27 +79,16 @@ class DateTime
 		return date($format, time());
 	}
 
-
-	public static function getDateTime($type = '', $format = '')
-	{
-		$type = strtoupper($type);
-		if ($type == '') {
-			$str = 'select NOW() as result';
-			if ($format == '') $format = 'jS-M-Y g:iA';
-		} else {
-			if ($format == '') {
-				if ($type == 'DATE') $format = 'jS-M-Y';
-				if ($type == 'TIME') $format = 'g:iA';
-			}
-			$str = 'select CUR' . $type . '() as result';
-		}
-		$ci =& get_instance();
-		$query = $ci->db->query($str)->row_array();
-		return date($format, strtotime($query['result']));
-	}
-
-
-	public static function format_datetime($datetime, $type = 'DT')
+    /**
+     * @param string $datetime Expected Format: 21/12/2016 | 2016-12-21 | 21-12-2016
+     * @param string $type  DT:DateTime | D:Date | T:Time
+     * @param string $format Desired Date or Time format.
+     *                       Default Formats : Date -> Y-m-d,
+     *                                         Time -> H:i:s
+     *
+     * @return bool|string
+     */
+    public static function formatDateTime($datetime, $type = 'DT', $format = '')
 	{
 		$datetime = str_replace('/', '-', $datetime);
 		$type = strtoupper($type);
@@ -116,18 +105,20 @@ class DateTime
 	}
 
 	/**
-	 * @param string $return like year, month or day
-	 * @param string $date1  should be in format of 'dd-mm-yyyy'
-	 * @param string $date2  should be in format of 'dd-mm-yyyy' and '' as default if blank
+	 * @param string $return Expected Format : year | month | day | hour | minute | second
+	 * @param string $date1  Expected Format: 21/12/2016 | 2016-12-21 | 21-12-2016
+	 * @param string $date2  Optional Field(If not passed, current datetime will be considered)
+     *                       If Passed, Expected Format: 21/12/2016 | 2016-12-21 | 21-12-2016
 	 *
 	 * @return mixed
 	 */
 	public static function get_date_diff($return, $date1, $date2 = '')
 	{
-		$datetime1 = new DateTime($date1);
-		$datetime2 = new DateTime($date2);
+		$datetime1 = new \DateTime($date1);
+		$datetime2 = new \DateTime($date2);
 
 		$difference = $datetime1->diff($datetime2);
+
 		$diff = FALSE;
 
 		switch (strtolower($return)) {
@@ -142,6 +133,18 @@ class DateTime
 			case 'day':
 				$diff = $difference->days;
 				break;
+
+            case 'hour':
+                $diff = ($difference->days * 24) + $difference->h;
+                break;
+
+            case 'minute':
+                $diff = ((($difference->days * 24) + $difference->h) * 60) + $difference->i;
+                break;
+
+            case 'second':
+                $diff = ((((($difference->days * 24) + $difference->h) * 60) + $difference->i) * 60) + $difference->s;
+                break;
 		}
 		if ($datetime1 > $datetime2) {
 			$diff = $diff * (-1);
@@ -150,45 +153,56 @@ class DateTime
 		return $diff;
 	}
 
-	/**
-	 * @param datetime $distant_timestamp
-	 * @param int      $max_units
-	 *
-	 * @return string
-	 */
-	public static function get_time_ago($distant_timestamp, $max_units = 1)
+    /**
+     * @param string $distant_timestamp            expected formats are, combination of date like 21/12/2016 | 2016-12-21 | 21-12-2016 and time like 08:29 PM | 8:29 PM | 20:29
+     * @param int    $max_units                    Expected Input : 1 -> year,
+     *                                             2 -> month,
+     *                                             3 -> day,
+     *                                             4 -> hour,
+     *                                             5 -> minute,
+     *                                             6 -> second
+     *
+     * @return string
+     */
+	public static function get_time_ago($distant_timestamp, $max_units = 6)
 	{
-		$i = 0;
-		$time = time() - strtotime($distant_timestamp); // to get the time since that moment
-		$tokens = [
-			31536000 => 'year',
-			2592000  => 'month',
-			604800   => 'week',
-			86400    => 'day',
-			3600     => 'hour',
-			60       => 'minute',
-			1        => 'second'
-		];
+        $date = new \DateTime();
+        $date->setTimestamp(strtotime($distant_timestamp));
+        $date = $date->diff(new \DateTime());
 
-		$responses = [];
-		while ($i < $max_units) {
-			foreach ($tokens as $unit => $text) {
-				if ($time < $unit) {
-					continue;
-				}
-				$i++;
-				$numberOfUnits = floor($time / $unit);
+        // build array
+        $since = json_decode($date->format('{"year":%y,"month":%m,"day":%d,"hour":%h,"minute":%i,"second":%s}'), true);
 
-				$responses[] = $numberOfUnits . ' ' . $text . (($numberOfUnits > 1) ? 's' : '');
-				$time -= ($unit * $numberOfUnits);
-				break;
-			}
-		}
+        // output only the first x date values
+        $since = array_slice($since, 0, $max_units);
 
-		if (!empty($responses)) {
-			return implode(', ', $responses) . ' ago';
-		}
+        // build string
+        $last_key = key(array_slice($since, -1, 1, true));
 
-		return 'Just now';
+        $string = '';
+
+        foreach ($since as $key => $val) {
+            // separator
+            if ($string) {
+                $string .= $key != $last_key ? ', ' : ' ' . 'and' . ' ';
+            }
+            // set plural
+            $key .= $val > 1 ? 's' : '';
+            // add date value
+            $string .= $val . ' ' . $key;
+        }
+
+        return $string;
 	}
+
+    /**
+     * @param $formatted_datetime   DateTime string
+     *
+     * @return bool
+     */
+    private function validateFormat($formatted_datetime)
+    {
+        return false;
+
+    }
 }
